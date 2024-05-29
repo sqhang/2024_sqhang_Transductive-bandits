@@ -1,0 +1,25 @@
+# this part of gitignore from https://github.com/mostafavilabuw/PersonalGenomeExpression-dev/blob/main/.gitignore
+/explore
+*.egg-info
+*__pycache__*
+*lightning_logs*
+*tb_logs*
+*.fa*
+*.npy
+*.vcf*
+*.csv
+*tar.gz
+
+# this part newly added
+**/data/*
+**/figures/*
+**/models/*
+**/tests/*
+**/outputs/*
+# this pycache might be more appropriate
+**/__pycache__/*
+**/jobs_record/*
+**/profiler_output/*
+**/wandb_logs/*
+*.err
+*.out
