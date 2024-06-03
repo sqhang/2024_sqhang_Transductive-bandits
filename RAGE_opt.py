@@ -33,7 +33,7 @@ class RAGE_opt(object):
         self.phase_index = 1
         self.theta_hat = None
                 
-        while len(self.active_arms) > 1:
+        while len(self.active_arms) > 5:
                         
             self.delta_t = self.delta/(self.phase_index**2)      
             
@@ -44,7 +44,7 @@ class RAGE_opt(object):
             eps = 1/self.factor
             
             # num_samples = max(np.ceil(8*(2**(self.phase_index-1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)), n_min).astype(int)
-            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)), n_min).astype(int)            
+            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)) / 100, n_min).astype(int)            
             allocation = self.rounding(design, num_samples)
             
             pulls = np.vstack([np.tile(self.X[i], (num, 1)) for i, num in enumerate(allocation) if num > 0])
@@ -144,7 +144,7 @@ class RAGE_opt(object):
             if count % 100 == 0:
                 logging.debug('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
                             
-            if relative < 0.01:
+            if relative < 0.05:
                  break
                         
         idx_fix = np.where(design < 1e-5)[0]

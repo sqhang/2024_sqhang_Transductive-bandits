@@ -117,8 +117,10 @@ class RAGE(object):
             y = self.Yhat[idx, :, None]
             g = ((self.X@A_inv@y)*(self.X@A_inv@y)).flatten()
             g_idx = np.argmax(g)
+            # print(g)
+            # g_idx = np.argmin(g)
                         
-            gamma = 2/(count+2)
+            gamma = 1/(count+2)
             design_update = -gamma*design
             design_update[g_idx] += gamma
                 
@@ -128,9 +130,11 @@ class RAGE(object):
             
             if count % 100 == 0:
                 logging.debug('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
-                            
+            
+            # print(f"count: {count}, np.max(rho): {np.max(rho)}\n")         
             if relative < 0.01:
-                 break
+                print(f"Early break at count {count}, rho max {np.max(rho)}")
+                break
                         
         idx_fix = np.where(design < 1e-5)[0]
         design[idx_fix] = 0

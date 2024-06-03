@@ -3,6 +3,7 @@ import itertools
 import logging
 import time
 from tqdm import tqdm
+import gc
 
 class RAGE_center(object):
     def __init__(self, X, theta_star, factor, delta, Z=None):
@@ -33,11 +34,12 @@ class RAGE_center(object):
             support = np.sum((design > 0).astype(int))
             n_min = 2 * self.factor * support
             eps = 1 / self.factor
-            num_samples = max(np.ceil(8 * (2 ** (self.phase_index + 1)) ** 2 * rho * (1 + eps) * np.log(2 * len(self.active_arms) ** 2 / self.delta_t)), n_min).astype(int)
+            print(f"n_min: {n_min}\n")
+            num_samples = max(np.ceil(8 * (2 ** (self.phase_index + 1)) ** 2 * rho * (1 + eps) * np.log(2 * len(self.active_arms) ** 2 / self.delta_t)) / 100, n_min).astype(int)
             allocation = self.rounding(design, num_samples)
             pulls = np.vstack([np.tile(self.X[i], (num, 1)) for i, num in enumerate(allocation) if num > 0])
             if not binary:
-                rewards = pulls @ self.theta_star + np.random.randn(allocation.sum(), 1) / 10
+                rewards = pulls @ self.theta_star + np.random.randn(allocation.sum(), 1)
             else:
                 rewards = np.random.binomial(1, pulls @ self.theta_star, (allocation.sum(), 1))
             self.A_inv = np.linalg.pinv(pulls.T @ pulls)
@@ -117,51 +119,98 @@ class RAGE_center(object):
         
     #     return design, np.max(rho)
 
+    # def optimal_allocation(self):
+    #     print("Enter optimal allocation ...\n")
+    #     design = np.ones(self.K)
+    #     design /= design.sum()
+
+    #     max_iter = 5000
+    #     XTX = self.X.T @ self.X  # Compute once and reuse
+
+    #     A_inv = None  # Will be redefined every loop, no preallocation possible for pinv
+    #     Ainvhalf = np.empty_like(XTX)  # Preallocate Ainvhalf matrix
+
+    #     for count in tqdm(range(1, max_iter)):
+    #         np.fill_diagonal(XTX, self.X.T @ (self.X * design))  # In-place update of XTX with weights
+
+    #         A_inv = np.linalg.pinv(XTX)  # Calculate pinv and assign to A_inv
+    #         U, D, V = np.linalg.svd(A_inv, full_matrices=False)
+    #         D_sqrt = np.sqrt(D, out=D)  # In-place sqrt on D
+
+    #         # Construct Ainvhalf in-place
+    #         np.dot(U, np.diag(D_sqrt), out=Ainvhalf)
+    #         np.dot(Ainvhalf, V.T, out=Ainvhalf)
+
+    #         newY = (self.Yhat @ Ainvhalf) ** 2
+    #         rho = newY.sum(axis=1)
+
+    #         idx = np.argmax(rho)
+    #         y = self.Yhat[idx, :, None]
+    #         X_A_inv_y = self.X @ A_inv @ y
+    #         g = (X_A_inv_y * X_A_inv_y).flatten()
+    #         g_idx = np.argmax(g)
+
+    #         gamma = 2 / (count + 2)
+    #         design *= -gamma
+    #         design[g_idx] += gamma
+
+    #         relative = np.linalg.norm(design) / np.linalg.norm(design)
+
+    #         if count % 100 == 0:
+    #             logging.info('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
+
+    #         if relative < 0.01:
+    #             print(f"Early break at count {count}, rho max {np.max(rho)}")
+    #             break
+
+    #     design[design < 1e-5] = 0
+
+    #     return design, np.max(rho)
+    
     def optimal_allocation(self):
-        print("Enter optimal allocation ...\n")
+        
         design = np.ones(self.K)
-        design /= design.sum()
-
+        design /= design.sum()  
+        
         max_iter = 5000
-        XTX = self.X.T @ self.X  # Compute once and reuse
-
-        A_inv = None  # Will be redefined every loop, no preallocation possible for pinv
-        Ainvhalf = np.empty_like(XTX)  # Preallocate Ainvhalf matrix
-
+        
         for count in tqdm(range(1, max_iter)):
-            np.fill_diagonal(XTX, self.X.T @ (self.X * design))  # In-place update of XTX with weights
-
-            A_inv = np.linalg.pinv(XTX)  # Calculate pinv and assign to A_inv
-            U, D, V = np.linalg.svd(A_inv, full_matrices=False)
-            D_sqrt = np.sqrt(D, out=D)  # In-place sqrt on D
-
-            # Construct Ainvhalf in-place
-            np.dot(U, np.diag(D_sqrt), out=Ainvhalf)
-            np.dot(Ainvhalf, V.T, out=Ainvhalf)
-
-            newY = (self.Yhat @ Ainvhalf) ** 2
-            rho = newY.sum(axis=1)
-
+            A_inv = np.linalg.pinv(self.X.T@np.diag(design)@self.X)    
+            U,D,V = np.linalg.svd(A_inv)
+            Ainvhalf = U@np.diag(np.sqrt(D))@V.T
+            
+            newY = (self.Yhat@Ainvhalf)**2
+            rho = newY@np.ones((newY.shape[1], 1))
+                        
             idx = np.argmax(rho)
             y = self.Yhat[idx, :, None]
-            X_A_inv_y = self.X @ A_inv @ y
-            g = (X_A_inv_y * X_A_inv_y).flatten()
+            g = ((self.X@A_inv@y)*(self.X@A_inv@y)).flatten()
             g_idx = np.argmax(g)
-
-            gamma = 2 / (count + 2)
-            design *= -gamma
-            design[g_idx] += gamma
-
-            relative = np.linalg.norm(design) / np.linalg.norm(design)
-
+            # print(g)
+            # g_idx = np.argmin(g)
+                        
+            gamma = 2/(count+2)
+            design_update = -gamma*design
+            design_update[g_idx] += gamma
+                
+            relative = np.linalg.norm(design_update)/(np.linalg.norm(design))
+                        
+            design += design_update
+            
             if count % 100 == 0:
-                logging.info('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
-
-            if relative < 0.01:
+                logging.debug('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
+            
+            # print(f"count: {count}, np.max(rho): {np.max(rho)}\n")         
+            if relative < 0.05:
+                print(f"Early break at count {count}, rho max {np.max(rho)}")
                 break
-
-        design[design < 1e-5] = 0
-
+            
+            del A_inv, U, D, V, Ainvhalf, newY, rho, y, g
+            gc.collect()
+                        
+        idx_fix = np.where(design < 1e-5)[0]
+        design[idx_fix] = 0
+        
         return design, np.max(rho)
 
 
