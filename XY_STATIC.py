@@ -1,4 +1,4 @@
-# Source: https://github.com/fiezt/Transductive-Linear-Bandit-Code/blob/master/XY_STATIC.py
+# Modified from: https://github.com/fiezt/Transductive-Linear-Bandit-Code/blob/master/XY_STATIC.py
 import numpy as np
 import itertools
 import logging
@@ -29,9 +29,10 @@ class XY_STATIC(object):
         self.delta = delta
         
         
-    def algorithm(self, seed, binary=False):
+    def algorithm(self, seed, binary=False, sigma=1):
         
         self.seed = seed
+        self.sigma = sigma
         np.random.seed(self.seed)
 
         self.arm_counts = np.zeros(self.K)
@@ -58,7 +59,7 @@ class XY_STATIC(object):
             pulls = np.vstack([np.tile(self.X[i], (num, 1)) for i, num in enumerate(allocation) if num > 0])
             
             if not binary:
-                rewards = pulls@self.theta_star + np.random.randn(num_samples, 1) / 10
+                rewards = pulls@self.theta_star + np.random.randn(num_samples, 1) * self.sigma
             else:
                 rewards = np.random.binomial(1, pulls@self.theta_star, (num_samples, 1))
                             
@@ -164,7 +165,7 @@ class XY_STATIC(object):
                 y = arm - arm_prime
                 
                 try:
-                    if np.sqrt(2*y.T@self.A_inv@y*np.log(1/self.delta_t)) >= y.T@self.theta_hat:
+                    if np.sqrt(2*(self.sigma**2)*y.T@self.A_inv@y*np.log(1/self.delta_t)) >= y.T@self.theta_hat:
                         stop = False
                         break
                 except:

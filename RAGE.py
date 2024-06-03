@@ -21,10 +21,13 @@ class RAGE(object):
         self.factor = factor
         
         
-    def algorithm(self, seed, var=True, binary=False):
+    def algorithm(self, seed, var=True, binary=False, sigma=1, stop_arm_count=1, rel_thresh=0.01):
         
         self.var=var
         self.seed = seed
+        self.sigma = sigma
+        self.stop_arm_count = stop_arm_count
+        self.rel_thresh = rel_thresh
         np.random.seed(self.seed)
 
         self.active_arms = list(range(len(self.Z)))
@@ -32,7 +35,7 @@ class RAGE(object):
         self.N = 0
         self.phase_index = 1
                 
-        while len(self.active_arms) > 1:
+        while len(self.active_arms) > self.stop_arm_count:
                         
             self.delta_t = self.delta/(self.phase_index**2)      
             
@@ -43,13 +46,13 @@ class RAGE(object):
             eps = 1/self.factor
             
             # num_samples = max(np.ceil(8*(2**(self.phase_index-1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)), n_min).astype(int)
-            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)), n_min).astype(int)            
+            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t) * (self.sigma ** 2)), n_min).astype(int)            
             allocation = self.rounding(design, num_samples)
             
             pulls = np.vstack([np.tile(self.X[i], (num, 1)) for i, num in enumerate(allocation) if num > 0])
             
             if not binary:
-                rewards = pulls@self.theta_star + np.random.randn(allocation.sum(), 1) / 10
+                rewards = pulls@self.theta_star + np.random.randn(allocation.sum(), 1) * self.sigma
             else:
                 rewards = np.random.binomial(1, pulls@self.theta_star, (allocation.sum(), 1))
             
@@ -61,16 +64,16 @@ class RAGE(object):
             self.arm_counts += allocation
             self.N += num_samples
             
-            logging.critical('\n\n')
-            logging.critical('finished phase %s' % str(self.phase_index-1))
+            logging.info('\n\n')
+            logging.info('finished phase %s' % str(self.phase_index-1))
             logging.info('design %s' % str(design))
             logging.debug('allocation %s' % str(allocation))
             logging.debug('arm counts %s' % str(self.arm_counts))
-            logging.critical('round sample count %s' % str(num_samples))
-            logging.critical('total sample count %s' % str(self.N))
-            logging.critical('active arms %s' % str(self.active_arms)) 
-            logging.critical('rho %s' % str(rho))      
-            logging.critical('\n\n')
+            logging.info('round sample count %s' % str(num_samples))
+            logging.info('total sample count %s' % str(self.N))
+            logging.info('active arms %s' % str(self.active_arms)) 
+            logging.info('rho %s' % str(rho))      
+            logging.info('\n\n')
 
         del self.Yhat
         del self.idxs
@@ -120,7 +123,7 @@ class RAGE(object):
             # print(g)
             # g_idx = np.argmin(g)
                         
-            gamma = 1/(count+2)
+            gamma = 2/(count+2)
             design_update = -gamma*design
             design_update[g_idx] += gamma
                 
@@ -132,8 +135,8 @@ class RAGE(object):
                 logging.debug('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
             
             # print(f"count: {count}, np.max(rho): {np.max(rho)}\n")         
-            if relative < 0.01:
-                print(f"Early break at count {count}, rho max {np.max(rho)}")
+            if relative < self.rel_thresh:
+                # print(f"Early break at count {count}, rho max {np.max(rho)}")
                 break
                         
         idx_fix = np.where(design < 1e-5)[0]
@@ -196,6 +199,6 @@ class RAGE(object):
                     arm_prime = self.Z[arm_idx_prime, :, None]
                     y = arm_prime - arm
 
-                    if np.sqrt(2*y.T@self.A_inv@y*np.log(2*self.K**2/self.delta_t)) <= y.T@self.theta_hat:
+                    if np.sqrt(2*(self.sigma**2)*y.T@self.A_inv@y*np.log(2*self.K**2/self.delta_t)) <= y.T@self.theta_hat:
                         self.active_arms.remove(arm_idx)
                         break

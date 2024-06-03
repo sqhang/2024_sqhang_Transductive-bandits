@@ -21,10 +21,13 @@ class RAGE_opt(object):
         self.factor = factor
         
         
-    def algorithm(self, seed, var=True, binary=False):
+    def algorithm(self, seed, var=True, binary=False, sigma=1, stop_arm_count=1, rel_thresh=0.01):
         
         self.var=var
         self.seed = seed
+        self.sigma = sigma
+        self.stop_arm_count = stop_arm_count
+        self.rel_thresh=rel_thresh        
         np.random.seed(self.seed)
 
         self.active_arms = list(range(len(self.Z)))
@@ -33,7 +36,7 @@ class RAGE_opt(object):
         self.phase_index = 1
         self.theta_hat = None
                 
-        while len(self.active_arms) > 5:
+        while len(self.active_arms) > self.stop_arm_count:
                         
             self.delta_t = self.delta/(self.phase_index**2)      
             
@@ -44,13 +47,13 @@ class RAGE_opt(object):
             eps = 1/self.factor
             
             # num_samples = max(np.ceil(8*(2**(self.phase_index-1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)), n_min).astype(int)
-            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t)) / 100, n_min).astype(int)            
+            num_samples = max(np.ceil(8*(2**(self.phase_index+1))**2*rho*(1+eps)*np.log(2*self.K_Z**2/self.delta_t) * (self.sigma ** 2)), n_min).astype(int)             
             allocation = self.rounding(design, num_samples)
             
             pulls = np.vstack([np.tile(self.X[i], (num, 1)) for i, num in enumerate(allocation) if num > 0])
             
             if not binary:
-                rewards = pulls@self.theta_star + np.random.randn(allocation.sum(), 1) / 10
+                rewards = pulls@self.theta_star + np.random.randn(allocation.sum(), 1) * self.sigma
             else:
                 rewards = np.random.binomial(1, pulls@self.theta_star, (allocation.sum(), 1))
             
@@ -94,19 +97,6 @@ class RAGE_opt(object):
         Y = self.Z[self.active_arms] - reference
         self.Yhat = Y
         
-        # k = len(self.active_arms)
-        # idxs = np.zeros((k*k,2))
-        # Zhat = self.Z[self.active_arms]
-        # Y = np.zeros((k*k, self.d))
-        # rangeidx = np.array(list(range(k)))
-        
-        # for i in range(k):
-        #     idxs[k*i:k*(i+1),0] = rangeidx
-        #     idxs[k*i:k*(i+1),1] = i
-        #     Y[k*i:k*(i+1),:] = Zhat - Zhat[i,:] 
-        
-        # self.Yhat = Y
-        # self.idxs = idxs
     def reference_update(self):
         if self.theta_hat is not None:
             active_Z = self.Z[self.active_arms]
@@ -144,7 +134,7 @@ class RAGE_opt(object):
             if count % 100 == 0:
                 logging.debug('design status %s, %s, %s, %s' % (self.seed, count, relative, np.max(rho)))
                             
-            if relative < 0.05:
+            if relative < self.rel_thresh:
                  break
                         
         idx_fix = np.where(design < 1e-5)[0]
@@ -172,67 +162,6 @@ class RAGE_opt(object):
         allocation[support_idx] = n_round
             
         return allocation.astype(int)
-      
-        
-    # def drop_arms(self):
-                
-            
-    #     if not self.var:
-    #         print("Enter not self.var\n")
-    #         removes = set()
-    #         scores = self.Yhat @ self.theta_hat
-    #         gap = 2 ** (-(self.phase_index))
-    #         for t, s in enumerate(scores):
-    #             if gap <= s:
-    #                 removes.add(t)
-    #         for r in removes:
-    #             self.active_arms.remove(r)
-            
-    #     else:
-    #         print("Enter self.var\n")
-    #         active_arms = self.active_arms.copy()
-
-    #         for arm_idx in active_arms:
-
-    #             arm = self.Z[arm_idx, :, None]
-
-    #             for arm_idx_prime in active_arms:
-
-    #                 if arm_idx == arm_idx_prime:
-    #                     continue
-
-    #                 arm_prime = self.Z[arm_idx_prime, :, None]
-    #                 y = arm_prime - arm
-                    
-    #                 print(f"diff y shape: {y.shape}")
-    #                 print(f"bound value: {np.sqrt(2*y.T@self.A_inv@y*np.log(2*self.K**2/self.delta_t))}")
-    #                 print(f"gap value: {y.T@self.theta_hat}")
-
-    #                 if np.sqrt(2*y.T@self.A_inv@y*np.log(2*self.K**2/self.delta_t)) <= y.T@self.theta_hat:
-    #                     self.active_arms.remove(arm_idx)
-    #                     break
-    
-    # def drop_arms(self):
-    #     if self.theta_hat is None:
-    #         return
-        
-    #     removes = set()
-    #     # print(self.opt_arm)
-    #     presumed_best_arm = self.Z[self.opt_arm, :, None]
-    #     for arm_idx in self.active_arms:
-    #         arm = self.Z[arm_idx, :, None]
-    #         y = presumed_best_arm - arm
-    #         # print(f"diff y shape: {y.shape}")
-    #         # print(f"bound value: {np.sqrt(2*y.T@self.A_inv@y*np.log(2*self.K**2/self.delta_t))}")
-    #         # print(f"gap value: {y.T@self.theta_hat}")
-    #         # if np.sqrt(2 * y.T @ self.A_inv @ y * np.log(2 * self.K ** 2 / self.delta_t)) <= y.T @ self.theta_hat:
-    #         #     removes.add(arm_idx)
-    #         if 2 ** (-self.phase_index-2) <= y.T @ self.theta_hat:
-    #             removes.add(arm_idx)
-        
-    #     for r in removes:
-    #         self.active_arms.remove(r)
-    #     # print(f"self.active_arms: {self.active_arms}\n")
 
     def drop_arms(self):
         if self.theta_hat is None:
@@ -245,8 +174,13 @@ class RAGE_opt(object):
         y = presumed_best_arm.T - active_arms_matrix
         projections = y @ self.theta_hat.flatten()
 
-        threshold = 2 ** (-self.phase_index - 2)
-        removes = np.array(self.active_arms)[projections >= threshold]
+        if not self.var:
+            thresholds = 2 ** (-self.phase_index - 2)
+        else:
+            quadratic_forms = np.einsum('ij,jk,ik->i', y, self.A_inv, y)
+            thresholds = np.sqrt(2 * (self.sigma**2) * np.log(2 * self.K**2 / self.delta_t) * quadratic_forms)
+        
+        removes = np.array(self.active_arms)[projections >= thresholds]
         self.active_arms = [arm for arm in self.active_arms if arm not in removes]
 
 
