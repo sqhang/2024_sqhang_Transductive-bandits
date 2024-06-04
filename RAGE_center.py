@@ -16,6 +16,7 @@ class RAGE_center(object):
         self.opt_arm = np.argmax(self.Z @ theta_star)
         self.delta = delta
         self.factor = factor
+        self.theta_hat_list = []
 
     def algorithm(self, seed, var=True, binary=False, sigma=1, stop_arm_count=1, rel_thresh=0.01):
         self.var = var
@@ -52,6 +53,7 @@ class RAGE_center(object):
             self.phase_index += 1
             self.arm_counts += allocation
             self.N += num_samples
+            self.theta_hat_list.append((self.N, self.theta_hat, len(self.active_arms)))
             
             logging.info('\n\n')
             logging.info('finished phase %s' % str(self.phase_index-1))

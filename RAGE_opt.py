@@ -19,6 +19,7 @@ class RAGE_opt(object):
         self.opt_arm = np.argmax(self.Z@theta_star)
         self.delta = delta
         self.factor = factor
+        self.theta_hat_list = []
         
         
     def algorithm(self, seed, var=True, binary=False, sigma=1, stop_arm_count=1, rel_thresh=0.01):
@@ -59,12 +60,14 @@ class RAGE_opt(object):
             
             self.A_inv = np.linalg.pinv(pulls.T@pulls)
             self.theta_hat = self.A_inv @ pulls.T @ rewards
+            # print(f"theta_hat shape: {self.theta_hat.shape}")
             
             self.reference_update()        
             self.drop_arms()
             self.phase_index += 1
             self.arm_counts += allocation
             self.N += num_samples
+            self.theta_hat_list.append((self.N, self.theta_hat, len(self.active_arms)))
             
             logging.info('\n\n')
             logging.info('finished phase %s' % str(self.phase_index-1))
@@ -100,6 +103,10 @@ class RAGE_opt(object):
     def reference_update(self):
         if self.theta_hat is not None:
             active_Z = self.Z[self.active_arms]
+            # print(f"active_Z.shape: {active_Z.shape}\n")
+            # print(f"theta_hat.shape: {self.theta_hat.shape}")
+            # print(f"opt_index: {np.argmax(active_Z @ self.theta_hat)}\n")
+            
             self.opt_arm = self.active_arms[np.argmax(active_Z @ self.theta_hat)]
         
     
