@@ -1,3 +1,4 @@
+## Modified from: https://github.com/fiezt/Transductive-Linear-Bandit-Code/blob/master/RAGE.py
 import numpy as np
 import itertools
 import logging
